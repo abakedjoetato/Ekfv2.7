@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 for module_name in list(sys.modules.keys()):
     if module_name == 'discord' or module_name.startswith('discord.'):
         del sys.modules[module_name]
+import discord_py_blocker  # Block discord.py imports
+
 
 # Import py-cord v2.6.1
 try:
@@ -106,7 +108,7 @@ class EmeraldKillfeedBot(discord.Bot):
             help_command=None,
             status=discord.Status.online,
             activity=discord.Game(name="Emerald's Killfeed v2.0"),
-            auto_sync_commands=True  # Enable command syncing for Discord registration
+            auto_sync_commands=False  # Disable auto-sync to prevent rate limits - use manual sync
         )
 
         # Initialize variables
@@ -185,12 +187,18 @@ class EmeraldKillfeedBot(discord.Bot):
         total_commands = 0
         command_names = []
         
-        # py-cord 2.6.1 command discovery - comprehensive approach
+        # py-cord 2.6.1 command discovery - use correct attributes
         all_commands = []
-        if hasattr(self, 'pending_application_commands') and self.pending_application_commands:
+        
+        # For py-cord 2.6.1, use pending_application_commands
+        if hasattr(self, 'pending_application_commands'):
             all_commands = list(self.pending_application_commands)
-        elif hasattr(self, 'application_commands') and self.application_commands:
-            all_commands = list(self.application_commands)
+        
+        # Fallback to walking through cogs for commands
+        if not all_commands:
+            for cog in self.cogs.values():
+                if hasattr(cog, '__cog_app_commands__'):
+                    all_commands.extend(cog.__cog_app_commands__)
         
         total_commands = len(all_commands)
         command_names = [getattr(cmd, 'name', 'Unknown') for cmd in all_commands[:10]]
