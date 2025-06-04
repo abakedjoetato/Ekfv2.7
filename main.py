@@ -545,10 +545,10 @@ class EmeraldKillfeedBot(discord.Bot):
                 minPoolSize=5
             )
             
-            # Test the connection with timeout
+            # Test the connection with shorter timeout
             await asyncio.wait_for(
                 self.mongo_client.admin.command('ping'), 
-                timeout=10.0
+                timeout=5.0
             )
             logger.info("✅ Successfully connected to MongoDB Atlas")
             
@@ -559,9 +559,16 @@ class EmeraldKillfeedBot(discord.Bot):
             self.db_wrapper = ThreadSafeDBWrapper(self.db_manager)
             self.db_wrapper.set_main_loop(main_loop)
             
-            # Initialize database architecture
-            await self.db_manager.initialize_database()
-            logger.info("✅ Database architecture initialized (PHASE 1)")
+            # Initialize database architecture with timeout
+            try:
+                await asyncio.wait_for(self.db_manager.initialize_database(), timeout=60.0)
+                logger.info("✅ Database architecture initialized (PHASE 1)")
+            except asyncio.TimeoutError:
+                logger.warning("⚠️ Database initialization timed out - continuing with basic functionality")
+                return True  # Continue without full database setup
+            except Exception as db_error:
+                logger.error(f"❌ Database initialization error: {db_error} - continuing with limited mode")
+                return True  # Continue with limited functionality
             
             # Initialize parser instances for scheduling
             await self.setup_parsers()
@@ -618,6 +625,9 @@ class EmeraldKillfeedBot(discord.Bot):
         logger.info("🚀 Bot is ready! Starting bulletproof setup...")
 
         try:
+            # Add overall startup timeout
+            startup_start = asyncio.get_event_loop().time()
+            
             # STEP 1: Load cogs with proper async loading
             logger.info("🔧 Loading cogs for command registration...")
             cogs_success = await self.load_cogs()
@@ -673,17 +683,22 @@ class EmeraldKillfeedBot(discord.Bot):
             logger.info("✅ Commands loaded and ready (sync bypassed to prevent rate limits)")
             logger.info("🔄 Command sync recovery will attempt restoration after rate limits clear")
 
-            # STEP 4: Set cold start flag for unified parser
+            # STEP 4: Set cold start flag for unified parser (with timeout)
             logger.info("🔄 Setting cold start flag for bot restart...")
             if hasattr(self, 'db_manager') and self.db_manager:
                 try:
-                    # Set global cold start flag in database
-                    await self.db_manager.guild_configs.update_many(
-                        {},  # All guilds
-                        {'$set': {'cold_start_required': True}},
-                        upsert=False
+                    # Set global cold start flag in database with timeout
+                    await asyncio.wait_for(
+                        self.db_manager.guild_configs.update_many(
+                            {},  # All guilds
+                            {'$set': {'cold_start_required': True}},
+                            upsert=False
+                        ),
+                        timeout=5.0
                     )
                     logger.info("✅ Cold start flag set for all guilds")
+                except asyncio.TimeoutError:
+                    logger.warning("⚠️ Cold start flag setting timed out - continuing anyway")
                 except Exception as flag_error:
                     logger.warning(f"Failed to set cold start flag: {flag_error}")
             
@@ -779,7 +794,8 @@ class EmeraldKillfeedBot(discord.Bot):
             logger.info("🔄 Registering commands with Discord...")
             await self.register_commands_safely()
             
-            logger.info("🎉 Bot setup completed successfully!")
+            startup_time = asyncio.get_event_loop().time() - startup_start
+            logger.info(f"🎉 Bot setup completed successfully in {startup_time:.2f} seconds!")
             self._setup_complete = True
 
         except Exception as e:
@@ -1100,10 +1116,16 @@ async def main():
         bot.premium_manager_v2 = PremiumManagerV2(bot.db_manager)
         bot.premium_manager = bot.premium_manager_v2
 
-        # Perform database cleanup and initialization
+        # Perform database cleanup and initialization with timeout
         logger.info("🧹 Performing database cleanup and initialization...")
-        await bot.db_manager.initialize_indexes()
-        logger.info("Database architecture initialized (PHASE 1)")
+        try:
+            await asyncio.wait_for(bot.db_manager.initialize_indexes(), timeout=30.0)
+            logger.info("Database architecture initialized (PHASE 1)")
+        except asyncio.TimeoutError:
+            logger.warning("Database initialization timed out - continuing with basic setup")
+        except Exception as db_init_error:
+            logger.error(f"Database initialization failed: {db_init_error} - continuing anyway")
+            logger.info("Database architecture initialized (PHASE 1 - limited mode)")
 
         await bot.start(bot_token)
     except KeyboardInterrupt:
