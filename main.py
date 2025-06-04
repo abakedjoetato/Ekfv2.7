@@ -14,7 +14,7 @@ import re
 import time
 import traceback
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 # Clean up any conflicting discord modules before importing
 for module_name in list(sys.modules.keys()):
@@ -247,7 +247,6 @@ class EmeraldKillfeedBot(commands.Bot):
         """
         try:
             # Check for command sync cooldown
-            from datetime import datetime, timedelta
             import subprocess
             
             cooldown_file = 'command_sync_cooldown.txt'
@@ -255,8 +254,8 @@ class EmeraldKillfeedBot(commands.Bot):
                 with open(cooldown_file, 'r') as f:
                     cooldown_until = datetime.fromisoformat(f.read().strip())
                 
-                if datetime.now(timezone.utc) < cooldown_until:
-                    remaining = (cooldown_until - datetime.now(timezone.utc)).total_seconds()
+                if datetime.now(timezone.utc) < cooldown_until.replace(tzinfo=timezone.utc):
+                    remaining = (cooldown_until.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)).total_seconds()
                     logger.info(f"⏰ Global sync in cooldown for {remaining:.0f}s - attempting guild-specific sync...")
                     
                     # Try guild-specific sync during cooldown
@@ -312,7 +311,6 @@ class EmeraldKillfeedBot(commands.Bot):
                 
             # Also check if there's been a rate limit in the last 60 seconds by checking timestamps
             try:
-                from datetime import datetime, timedelta
                 import re
                 
                 # Get recent logs with timestamps
