@@ -38,7 +38,7 @@ class LeaderboardsFixed(discord.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-    
+
     async def check_premium_access(self, guild_id: int) -> bool:
         """Check if guild has premium access - unified validation"""
         try:
@@ -64,10 +64,10 @@ class LeaderboardsFixed(discord.Cog):
                          server: discord.Option(str, "Server to view stats for", required=False)):
         """Display properly themed leaderboard"""
         await ctx.defer()
-        
+
         try:
 
-        
+
             pass
             if not ctx.guild:
 
@@ -224,7 +224,7 @@ class LeaderboardsFixed(discord.Cog):
         except Exception as e:
             logger.error(f"Error getting top kills: {e}")
             return []
-            
+
     async def create_themed_leaderboard(self, guild_id: int, server_id: str, stat_type: str, server_name: str) -> Tuple[Optional[discord.Embed], Optional[discord.File]]:
         """Create properly themed leaderboard using EmbedFactory"""
         try:

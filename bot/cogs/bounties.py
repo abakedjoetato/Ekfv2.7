@@ -27,7 +27,7 @@ class Bounties(discord.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-    
+
     async def check_premium_access(self, guild_id: int) -> bool:
         """Check if guild has premium access - unified validation"""
         try:
@@ -73,7 +73,7 @@ class Bounties(discord.Cog):
         if not ctx.guild:
             await ctx.respond("❌ This command must be used in a server", ephemeral=True)
             return
-            
+
         guild_id = ctx.guild.id if ctx.guild else 0
 
         if isinstance(target, discord.Member):
@@ -449,10 +449,10 @@ class Bounties(discord.Cog):
             # Check new server_channels structure first
             server_channels_config = guild_config.get('server_channels', {})
             default_server = server_channels_config.get('default', {})
-            
+
             # Check legacy channels structure
             legacy_channels = guild_config.get('channels', {})
-            
+
             # Priority: default server -> legacy channels (bounties go to bounties channel or killfeed)
             killfeed_channel_id = (default_server.get('bounties') or 
                                   legacy_channels.get('bounties') or
@@ -608,10 +608,10 @@ class Bounties(discord.Cog):
             # Check new server_channels structure first
             server_channels_config = guild_config.get('server_channels', {})
             default_server = server_channels_config.get('default', {})
-            
+
             # Check legacy channels structure
             legacy_channels = guild_config.get('channels', {})
-            
+
             # Priority: default server -> legacy channels (bounties go to bounties channel or killfeed)
             killfeed_channel_id = (default_server.get('bounties') or 
                                   legacy_channels.get('bounties') or
@@ -677,7 +677,7 @@ class Bounties(discord.Cog):
             pass
             guild_id = ctx.guild.id if ctx.guild else 0
             discord_id = ctx.user.id
-            
+
             if not await self.check_premium_server(guild_id):
                 embed = discord.Embed(
                     title="🚫 Premium Required",
@@ -686,24 +686,24 @@ class Bounties(discord.Cog):
                 )
                 await ctx.respond(embed=embed, ephemeral=True)
                 return
-                
+
             # Check wallet balance
             wallet = await self.bot.db_manager.get_wallet(guild_id or 0, discord_id)
             if wallet['balance'] < amount:
                 await ctx.respond(f"Insufficient funds! You have ${wallet['balance']:,}", ephemeral=True)
                 return
-                
+
             # Resolve target
             target_result = await self.resolve_target(ctx, target)
             if not target_result:
                 await ctx.respond("Target not found or invalid!", ephemeral=True)
                 return
-                
+
             target_name, target_discord_id = target_result
-            
+
             # Deduct bounty amount
             await self.bot.db_manager.update_wallet(guild_id or 0, discord_id, -amount, "bounty_set", "economy_operation")
-            
+
             # Create bounty
             bounty_doc = {
                 "guild_id": guild_id,
@@ -715,16 +715,16 @@ class Bounties(discord.Cog):
                 "expires_at": datetime.now(timezone.utc) + timedelta(hours=24),
                 "claimed": False
             }
-            
+
             await self.bot.db_manager.db.bounties.insert_one(bounty_doc)
-            
+
             embed = discord.Embed(
                 title="Bounty Set",
                 description=f"**Target:** {target_name}\n**Amount:** ${amount:,}\n**Expires:** <t:{int((datetime.now(timezone.utc) + timedelta(hours=24)).timestamp())}:R>",
                 color=0xffa500
             )
             await ctx.respond(embed=embed)
-            
+
         except Exception as e:
             logger.error(f"Failed to set bounty: {e}")
             await ctx.respond("Failed to set bounty", ephemeral=True)
@@ -736,13 +736,13 @@ class Bounties(discord.Cog):
 
             pass
             guild_id = ctx.guild.id if ctx.guild else 0
-            
+
             bounties = await self.bot.db_manager.db.bounties.find({
                 "guild_id": guild_id,
                 "claimed": False,
                 "expires_at": {"$gt": datetime.now(timezone.utc)}
             }).sort("bounty_amount", -1).to_list(length=20)
-            
+
             if not bounties:
                 embed = discord.Embed(
                     title="Active Bounties",
@@ -751,20 +751,20 @@ class Bounties(discord.Cog):
                 )
                 await ctx.respond(embed=embed, ephemeral=True)
                 return
-                
+
             embed = discord.Embed(
                 title="Active Bounties",
                 color=0xffa500
             )
-            
+
             bounty_text = ""
             for bounty in bounties[:10]:
                 expires_timestamp = int(bounty['expires_at'].timestamp())
                 bounty_text += f"**{bounty['target_name']}** - ${bounty['bounty_amount']:,} (expires <t:{expires_timestamp}:R>)\n"
-                
+
             embed.add_field(name="Targets", value=bounty_text, inline=False)
             await ctx.respond(embed=embed, ephemeral=True)
-            
+
         except Exception as e:
             logger.error(f"Failed to list bounties: {e}")
             await ctx.respond("Failed to list bounties", ephemeral=True)

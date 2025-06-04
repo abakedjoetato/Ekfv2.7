@@ -1,5 +1,4 @@
-"""
-Emerald's Killfeed - PvP Stats System (REFACTORED - PHASE 4)
+"""Emerald's Killfeed - PvP Stats System (REFACTORED - PHASE 4)
 /stats shows: Kills, deaths, KDR, Suicides, Longest streak, Most used weapon, Rival/Nemesis
 /compare <user> compares two profiles
 Uses py-cord 2.6.1 syntax and EmbedFactory
@@ -32,7 +31,7 @@ class Stats(discord.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-    
+
     async def check_premium_access(self, guild_id: int) -> bool:
         """Check if guild has premium access - unified validation"""
         try:
@@ -73,35 +72,35 @@ class Stats(discord.Cog):
 
                 logger.error(f"Failed to send response: {e}")
             return
-            
+
         guild_id = ctx.guild.id if ctx.guild else 0
-        
+
         if isinstance(target, discord.Member):
             # Discord user - must be linked
             player_data = await self.bot.db_manager.get_linked_player(guild_id or 0, target.id)
             if not player_data or not player_data.get('linked_characters'):
                 return None
             return player_data['linked_characters'], target.display_name
-        
+
         elif isinstance(target, str):
             # Raw player name - search database directly (case-insensitive)
             target_name = target.strip()
             if not target_name:
                 return None
-            
+
             # Find player in PvP data (case-insensitive match)
             cursor = self.bot.db_manager.pvp_data.find({
                 'guild_id': guild_id,
                 'player_name': {'$regex': f'^{target_name}$', '$options': 'i'}
             })
-            
+
             async for player_doc in cursor:
                 actual_player_name = player_doc.get('player_name')
                 if actual_player_name:
                     return [actual_player_name], actual_player_name
-            
+
             return None
-        
+
         return None
 
     async def get_player_combined_stats(self, guild_id: int, player_characters: List[str], server_id: str = "default") -> Dict[str, Any]:
@@ -146,11 +145,11 @@ class Stats(discord.Cog):
                         'guild_id': guild_id,
                         'player_name': character
                     }
-                    
+
                     # Add server filter if specified
                     if server_id:
                         query['server_id'] = server_id
-                    
+
                     cursor = self.bot.db_manager.pvp_data.find(query)
 
                     async for server_stats in cursor:
@@ -164,20 +163,20 @@ class Stats(discord.Cog):
                         kills = max(0, server_stats.get('kills', 0))
                         deaths = max(0, server_stats.get('deaths', 0))
                         suicides = max(0, server_stats.get('suicides', 0))
-                        
+
                         combined_stats['kills'] += kills
                         combined_stats['deaths'] += deaths
                         combined_stats['suicides'] += suicides
-                        
+
                         # Track personal best distance (take the maximum across all servers)
                         pb_distance = float(server_stats.get('personal_best_distance', 0.0))
                         if pb_distance > combined_stats['personal_best_distance']:
                             combined_stats['personal_best_distance'] = pb_distance
-                        
+
                         # Add to total distance traveled
                         total_distance = float(server_stats.get('total_distance', 0.0))
                         combined_stats['total_distance'] += total_distance
-                        
+
                         combined_stats['servers_played'] += 1
 
                         # Track best streak
@@ -235,11 +234,11 @@ class Stats(discord.Cog):
                     'killer': character,
                     'is_suicide': False  # Only count actual PvP kills for weapon stats
                 }
-                
+
                 # Add server filter if specified
                 if server_id:
                     query['server_id'] = server_id
-                
+
                 cursor = self.bot.db_manager.kill_events.find(query)
 
                 async for kill_event in cursor:
@@ -271,11 +270,11 @@ class Stats(discord.Cog):
                     'killer': character,
                     'is_suicide': False
                 }
-                
+
                 # Add server filter if specified
                 if server_id:
                     query_kills['server_id'] = server_id
-                
+
                 cursor = self.bot.db_manager.kill_events.find(query_kills)
 
                 async for kill_event in cursor:
@@ -289,11 +288,11 @@ class Stats(discord.Cog):
                     'victim': character,
                     'is_suicide': False
                 }
-                
+
                 # Add server filter if specified
                 if server_id:
                     query_deaths['server_id'] = server_id
-                
+
                 cursor = self.bot.db_manager.kill_events.find(query_deaths)
 
                 async for kill_event in cursor:
@@ -326,10 +325,10 @@ class Stats(discord.Cog):
                    server: discord.Option(str, "Server to view stats for", required=False) = None):
         """View PvP statistics for yourself, another user, or a player name"""
         import asyncio
-        
+
         try:
 
-        
+
             pass
             # Immediate defer to prevent Discord timeout
             try:
@@ -348,7 +347,7 @@ class Stats(discord.Cog):
                 logger.error(f"Failed to defer interaction: {e}")
 
                 await ctx.respond("Processing...", ephemeral=True)
-            
+
             if not ctx.guild:
                 try:
 
@@ -385,7 +384,7 @@ class Stats(discord.Cog):
                             server_name = server_config.get('name', f'Server {server}')
                             server_found = True
                             break
-                    
+
                     if not server_found:
                         try:
 
@@ -537,10 +536,10 @@ class Stats(discord.Cog):
 
             # Get combined stats with timeout protection
             import asyncio
-            
+
             async def get_stats():
                 return await self.get_player_combined_stats(guild_id or 0, player_characters, server)
-            
+
             stats = await asyncio.wait_for(get_stats(), timeout=8.0)
 
             total_kills = stats['kills']
@@ -559,10 +558,10 @@ class Stats(discord.Cog):
                 weaponstats_file = discord.File("./assets/WeaponStats.png", filename="WeaponStats.png")
                 embed.set_thumbnail(url="attachment://WeaponStats.png")
                 embed.set_footer(text="Powered by Discord.gg/EmeraldServers")
-                
+
                 try:
 
-                
+
                     pass
                     if hasattr(ctx, 'response') and not ctx.response.is_done():
                         await ctx.respond(embed=embed, file=weaponstats_file)
@@ -715,14 +714,14 @@ class Stats(discord.Cog):
                     'player_name': character,
                     'server_id': server_id if server_id else {'$exists': True}
                 })
-                
+
                 # Check if player has any kill events
                 kills_exist = await self.bot.db_manager.kill_events.find_one({
                     'guild_id': guild_id,
                     'killer': character,
                     'server_id': server_id if server_id else {'$exists': True}
                 })
-                
+
                 if pvp_exists or kills_exist:
                     return True
             return False
@@ -950,22 +949,22 @@ class Stats(discord.Cog):
         except Exception as e:
             logger.error(f"Failed to defer interaction: {e}")
             return
-        
+
         try:
             if not ctx.guild:
                 await ctx.followup.send("This command can only be used in a server!", ephemeral=True)
                 return
-                
+
             guild_id = ctx.guild.id
             logger.info(f"Processing /online command for guild {guild_id}")
-            
+
             # Fast, optimized database query - get online and queued players
             try:
                 sessions = await self.bot.db_manager.player_sessions.find(
                     {'guild_id': guild_id, 'state': {'$in': ['online', 'queued']}},
                     {'player_name': 1, 'eos_id': 1, 'server_name': 1, 'server_id': 1, 'state': 1, '_id': 0}
                 ).limit(50).to_list(length=50)
-                
+
             except Exception as e:
                 logger.error(f"Database query failed in /online: {e}")
                 embed = discord.Embed(
@@ -975,252 +974,10 @@ class Stats(discord.Cog):
                 )
                 await ctx.followup.send(embed=embed)
                 return
-            
+
             # Create simple embed
             if not sessions:
                 embed = discord.Embed(
                     title="🌐 No Players Online",
                     description="No players are currently online on any server.",
-                    color=0xFFAA00,
-                    timestamp=datetime.now(timezone.utc)
-                )
-            else:
-                # Group by server and separate online vs queued
-                servers = {}
-                for session in sessions:
-                    server_name = session.get('server_name', 'Unknown')
-                    # Use player_name (from EOS ID resolution) or fallback to EOS ID
-                    player_name = session.get('player_name') or session.get('eos_id', 'Unknown')[:8]
-                    state = session.get('state', 'unknown')
-                    
-                    if server_name not in servers:
-                        servers[server_name] = {'online': [], 'queued': []}
-                    
-                    servers[server_name][state].append(player_name)
-                
-                total_players = len(sessions)
-                online_count = sum(len(server['online']) for server in servers.values())
-                queued_count = sum(len(server['queued']) for server in servers.values())
-                
-                embed = discord.Embed(
-                    title=f"🌐 Players ({total_players} total)",
-                    description=f"🟢 **{online_count}** online  •  🟡 **{queued_count}** queued",
-                    color=0x00FF00,
-                    timestamp=datetime.now(timezone.utc)
-                )
-                
-                for server_name, player_data in servers.items():
-                    online_players = player_data['online']
-                    queued_players = player_data['queued']
-                    server_total = len(online_players) + len(queued_players)
-                    
-                    player_list = []
-                    
-                    # Add online players
-                    for i, player in enumerate(online_players[:10], 1):
-                        player_list.append(f"`{i:2d}.` 🟢 **{player}**")
-                    
-                    # Add queued players
-                    for i, player in enumerate(queued_players[:5], len(online_players) + 1):
-                        player_list.append(f"`{i:2d}.` 🟡 **{player}** (queued)")
-                    
-                    embed.add_field(
-                        name=f"🌐 {server_name} ({server_total} players)",
-                        value="\n".join(player_list) if player_list else "No players",
-                        inline=False
-                    )
-            
-            embed.set_footer(text="Updated every 3 minutes")
-            
-            # Send response
-            try:
-                await ctx.followup.send(embed=embed)
-            except discord.errors.NotFound:
-                logger.warning("Interaction expired, cannot send online response")
-            except Exception as e:
-                logger.error(f"Failed to send online response: {e}")
-            
-        except Exception as e:
-            logger.error(f"Error in /online command: {e}")
-            try:
-                await ctx.followup.send("An error occurred while retrieving online players.", ephemeral=True)
-            except:
-                pass
-
-    async def _display_single_server_players(self, ctx, server_name: str, server_players: list):
-        """Display players for a single specific server"""
-        # Sort by join time (most recent first)
-        server_players.sort(key=lambda x: x['join_time'] if x['join_time'] else datetime.min, reverse=True)
-        
-        # Create embed
-        embed = discord.Embed(
-            title=f"🌐 Online Players - {server_name}",
-            description=f"**{len(server_players)}** players currently online",
-            color=0x32CD32,
-            timestamp=datetime.now(timezone.utc)
-        )
-        
-        # Add thumbnail logo from assets
-        embed.set_thumbnail(url="attachment://Connections.png")
-        
-        if server_players:
-            # Add players to embed with time played
-            player_lines = []
-            for i, player in enumerate(server_players[:20], 1):  # Limit to 20 players
-                name = player['name']
-                time_played = ""
-                
-                if player['join_time']:
-                    time_diff = datetime.now(timezone.utc) - player['join_time']
-                    hours = int(time_diff.total_seconds() // 3600)
-                    minutes = int((time_diff.total_seconds() % 3600) // 60)
-                    
-                    if hours > 0:
-                        time_played = f" (Online {hours}h {minutes}m)"
-                    else:
-                        time_played = f" (Online {minutes}m)"
-                
-                player_lines.append(f"`{i:2d}.` **{name}**{time_played}")
-            
-            embed.add_field(
-                name="📋 Players Online",
-                value="\n".join(player_lines),
-                inline=False
-            )
-            
-            if len(server_players) > 20:
-                embed.add_field(
-                    name="📊 Note",
-                    value=f"Showing first 20 of {len(server_players)} players",
-                    inline=False
-                )
-        else:
-            embed.add_field(
-                name="📭 No Players Online",
-                value="No players are currently online on this server.",
-                inline=False
-            )
-        
-        # Add server info footer
-        embed.set_footer(
-            text=f"Updated every 3 minutes • Data from {server_name}",
-            icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
-        )
-        
-        # Create and attach the logo file
-        connections_file = discord.File("./assets/Connections.png", filename="Connections.png")
-        try:
-
-            pass
-            if hasattr(ctx, 'response') and not ctx.response.is_done():
-
-                await ctx.respond(embed=embed, file=connections_file)
-
-            else:
-
-                await ctx.followup.send(embed=embed, file=connections_file)
-
-        except discord.errors.NotFound:
-
-            logger.warning("Interaction expired, cannot send response")
-
-        except Exception as e:
-
-            logger.error(f"Failed to send response: {e}")
-
-    async def _display_all_servers_players(self, ctx, servers_with_players: dict, servers: list):
-        """Display players across all servers in the guild"""
-        total_players = sum(len(players) for players in servers_with_players.values())
-        
-        # Create embed
-        embed = discord.Embed(
-            title="🌐 Online Players - All Servers",
-            description=f"**{total_players}** players currently online across all servers",
-            color=0x32CD32,
-            timestamp=datetime.now(timezone.utc)
-        )
-        
-        # Add thumbnail logo from assets
-        embed.set_thumbnail(url="attachment://Connections.png")
-        
-        if total_players == 0:
-            embed.add_field(
-                name="📭 No Players Online",
-                value="No players are currently online on any server.",
-                inline=False
-            )
-        else:
-            # Get server names for display
-            server_names = {}
-            for server in servers:
-                if server:
-                    server_id = str(server.get('_id', server.get('id', 'unknown')))
-                    server_names[server_id] = server.get('name', f"Server {server_id}")
-            
-            # Display each server with players
-            for server_id, players in servers_with_players.items():
-                if not players:
-                    continue
-                    
-                server_display_name = server_names.get(server_id, f"Server {server_id}")
-                
-                # Sort players by join time
-                players.sort(key=lambda x: x['join_time'] if x['join_time'] else datetime.min, reverse=True)
-                
-                # Format player list
-                player_lines = []
-                for i, player in enumerate(players[:10], 1):  # Limit to 10 per server
-                    name = player['name']
-                    time_played = ""
-                    
-                    if player['join_time']:
-                        time_diff = datetime.now(timezone.utc) - player['join_time']
-                        hours = int(time_diff.total_seconds() // 3600)
-                        minutes = int((time_diff.total_seconds() % 3600) // 60)
-                        
-                        if hours > 0:
-                            time_played = f" ({hours}h {minutes}m)"
-                        else:
-                            time_played = f" ({minutes}m)"
-                    
-                    player_lines.append(f"`{i}.` **{name}**{time_played}")
-                
-                field_value = "\n".join(player_lines)
-                if len(players) > 10:
-                    field_value += f"\n*... and {len(players) - 10} more*"
-                
-                embed.add_field(
-                    name=f"🎮 {server_display_name} ({len(players)} online)",
-                    value=field_value,
-                    inline=should_use_inline(field_value)
-                )
-        
-        # Add footer
-        embed.set_footer(
-            text="Updated every 3 minutes • Use /online <server> for detailed view",
-            icon_url=ctx.guild.icon.url if ctx.guild and ctx.guild.icon else None
-        )
-        
-        # Create and attach the logo file
-        connections_file = discord.File("./assets/Connections.png", filename="Connections.png")
-        try:
-
-            pass
-            if hasattr(ctx, 'response') and not ctx.response.is_done():
-
-                await ctx.respond(embed=embed, file=connections_file)
-
-            else:
-
-                await ctx.followup.send(embed=embed, file=connections_file)
-
-        except discord.errors.NotFound:
-
-            logger.warning("Interaction expired, cannot send response")
-
-        except Exception as e:
-
-            logger.error(f"Failed to send response: {e}")
-
-def setup(bot):
-    bot.add_cog(Stats(bot))
+                    color=0xFFAA00

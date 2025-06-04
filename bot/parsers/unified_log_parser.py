@@ -433,6 +433,25 @@ class UnifiedLogParser:
             logger.error(f"Error sending embeds: {e}")
     
     def _determine_channel_type(self, embed) -> str:
+        """Determine appropriate channel type based on embed title"""
+        try:
+            if hasattr(embed, 'title') and embed.title:
+                title = embed.title.lower()
+                if any(word in title for word in ['mission', 'operation', 'target']):
+                    return 'missions'
+                elif any(word in title for word in ['airdrop', 'supply', 'cargo']):
+                    return 'airdrop'
+                elif any(word in title for word in ['helicopter', 'crash', 'wreckage']):
+                    return 'helicrash'
+                elif any(word in title for word in ['trader', 'merchant', 'dealer']):
+                    return 'trader'
+                elif any(word in title for word in ['connect', 'disconnect', 'join', 'left']):
+                    return 'events'
+                elif any(word in title for word in ['kill', 'eliminate', 'combat']):
+                    return 'killfeed'
+            return 'events'  # Default fallback
+        except Exception:
+            return 'events'el_type(self, embed) -> str:
         """Determine appropriate channel type based on embed content"""
         if not embed or not hasattr(embed, 'title'):
             return 'killfeed'

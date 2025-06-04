@@ -21,7 +21,7 @@ class Factions(discord.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-    
+
     async def check_premium_access(self, guild_id: int) -> bool:
         """Check if guild has premium access - unified validation"""
         try:
@@ -63,32 +63,32 @@ class Factions(discord.Cog):
             total_kills = 0
             total_deaths = 0
             total_distance = 0.0
-            
+
             for member_id in member_ids:
                 # Get linked player names for this Discord user
                 user_link = await self.bot.db_manager.user_links.find_one({
                     'guild_id': guild_id,
                     'discord_id': member_id
                 })
-                
+
                 if user_link:
                     player_names = user_link.get('player_names', [])
-                    
+
                     # Get stats from pvp_data for each linked player name
                     for player_name in player_names:
                         cursor = self.bot.db_manager.pvp_data.find({
                             'guild_id': guild_id,
                             'player_name': player_name
                         })
-                        
+
                         async for player_stats in cursor:
                             total_kills += player_stats.get('kills', 0)
                             total_deaths += player_stats.get('deaths', 0)
                             total_distance += player_stats.get('total_distance', 0.0)
-            
+
             # Calculate K/D ratio
             kdr = total_kills / total_deaths if total_deaths > 0 else total_kills
-            
+
             return {
                 'total_kills': total_kills,
                 'total_deaths': total_deaths,
@@ -272,44 +272,16 @@ class Factions(discord.Cog):
             await self.bot.db_manager.factions.insert_one(faction_doc)
 
             # Create success embed
-            # Create success embed
-            embed = discord.Embed(
-                title="🏛️ Faction Created",
-                description=f"Successfully created faction **{name}**!",
-                color=0x00FF00,
-                timestamp=datetime.now(timezone.utc)
-            )
+            # Create faction created embed
+            embed, file_attachment = await EmbedFactory.build_faction_created_embed({
+                'faction_name': name,
+                'leader': ctx.user.display_name,
+                'faction_tag': tag,
+                'member_count': 1,
+                'max_members': 10
+            })
 
-            embed.add_field(
-                name="👑 Leader",
-                value=ctx.user.mention,
-                inline=True
-            )
-
-            if tag:
-                embed.add_field(
-                    name="🏷️ Tag",
-                    value=f"[{tag}]",
-                    inline=True
-                )
-
-            embed.add_field(
-                name="👥 Members",
-                value="1/20",
-                inline=True
-            )
-
-            embed.add_field(
-                name="Next Steps",
-                value="• Use `/faction invite` to invite members\n• Use `/faction settings` to configure your faction",
-                inline=False
-            )
-
-            faction_file = discord.File("./assets/Faction.png", filename="Faction.png")
-            embed.set_thumbnail(url="attachment://Faction.png")
-            embed.set_footer(text="Powered by Discord.gg/EmeraldServers")
-
-            await ctx.respond(embed=embed, file=faction_file)
+            await ctx.respond(embed=embed, file=file_attachment)
 
         except Exception as e:
             logger.error(f"Failed to create faction: {e}")

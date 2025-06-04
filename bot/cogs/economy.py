@@ -20,18 +20,18 @@ class Economy(commands.Cog):
 
             user_id = ctx.user.id
             guild_id = ctx.guild.id
-            
+
             # Basic balance check - implement your database logic here
             balance = 1000  # Default balance
-            
+
             embed = discord.Embed(
                 title="💰 Account Balance",
                 description=f"Your current balance: **{balance:,}** credits",
                 color=0x00ff00
             )
-            
+
             await ctx.followup.send(embed=embed)
-            
+
         except Exception as e:
             logger.error(f"Error in balance command: {e}")
             await ctx.followup.send("❌ Failed to check balance", ephemeral=True)
@@ -49,7 +49,7 @@ class Economy(commands.Cog):
             if amount <= 0:
                 await ctx.followup.send("❌ Amount must be positive", ephemeral=True)
                 return
-                
+
             if user.id == ctx.user.id:
                 await ctx.followup.send("❌ You cannot send credits to yourself", ephemeral=True)
                 return
@@ -60,9 +60,9 @@ class Economy(commands.Cog):
                 description=f"Successfully sent **{amount:,}** credits to {user.mention}",
                 color=0x00ff00
             )
-            
+
             await ctx.followup.send(embed=embed)
-            
+
         except Exception as e:
             logger.error(f"Error in pay command: {e}")
             await ctx.followup.send("❌ Failed to send payment", ephemeral=True)
@@ -82,16 +82,16 @@ class Economy(commands.Cog):
                 description="Top users by credits",
                 color=0xffd700
             )
-            
+
             # Basic leaderboard - implement your database logic here
             embed.add_field(
                 name="📊 Leaderboard",
                 value="No data available",
                 inline=False
             )
-            
+
             await ctx.followup.send(embed=embed)
-            
+
         except Exception as e:
             logger.error(f"Error in credits command: {e}")
             await ctx.followup.send("❌ Failed to show leaderboard", ephemeral=True)

@@ -1,3 +1,11 @@
+` tags.
+
+```text
+Applying EmbedFactory integration and channel routing fixes to the ScalableUnifiedProcessor class.
+```
+
+```
+<replit_final_file>
 """
 Scalable Unified Processor - Fixed Version
 Handles log parsing and event detection with proper syntax
@@ -15,12 +23,12 @@ logger = logging.getLogger(__name__)
 
 class ScalableUnifiedProcessor:
     """Unified processor for parsing game server logs"""
-    
+
     def __init__(self, bot):
         self.bot = bot
         self.connection_patterns = self._compile_connection_patterns()
         self.event_patterns = self._compile_event_patterns()
-    
+
     def _compile_connection_patterns(self) -> Dict[str, re.Pattern]:
         """Compile regex patterns for connection events - Real Deadside server format"""
         return {
@@ -31,7 +39,7 @@ class ScalableUnifiedProcessor:
             # Disconnected state - player left (based on actual log format)
             'player_disconnect': re.compile(r'LogNet: UChannel::Close:.*?UniqueId: EOS:\|([a-f0-9]+)', re.IGNORECASE)
         }
-    
+
     def _compile_event_patterns(self) -> Dict[str, re.Pattern]:
         """Compile regex patterns for game events - Based on real Deadside log format"""
         return {
@@ -52,31 +60,31 @@ class ScalableUnifiedProcessor:
             'vehicle_add': re.compile(r'LogSFPS: \[ASFPSGameMode::NewVehicle_Add\] Add vehicle.*Total (\d+)', re.IGNORECASE),
             'vehicle_del': re.compile(r'LogSFPS: \[ASFPSGameMode::DelVehicle\].*Total (\d+)', re.IGNORECASE)
         }
-    
+
     def parse_log_line(self, line: str) -> Optional[Dict[str, Any]]:
         """Parse a single log line and extract relevant information"""
         line = line.strip()
         if not line:
             return None
-        
+
         try:
             # Extract timestamp
             if not line.startswith('['):
                 return None
-            
+
             timestamp_end = line.find(']')
             if timestamp_end == -1:
                 return None
-            
+
             timestamp_str = line[1:timestamp_end]
             message = line[timestamp_end + 1:].strip()
-            
+
             # Parse timestamp
             try:
                 timestamp = datetime.strptime(timestamp_str, '%Y.%m.%d-%H.%M.%S:%f')
             except ValueError:
                 return None
-            
+
             # Check connection patterns
             for event_type, pattern in self.connection_patterns.items():
                 match = pattern.search(message)
@@ -110,7 +118,7 @@ class ScalableUnifiedProcessor:
                             'eos_id': match.group(1),
                             'raw_message': message
                         }
-            
+
             # Check event patterns
             for event_type, pattern in self.event_patterns.items():
                 match = pattern.search(message)
@@ -119,23 +127,23 @@ class ScalableUnifiedProcessor:
                     normalized_event = self._normalize_event_data(event_type, match.groups(), timestamp, message)
                     if normalized_event is not None:
                         return normalized_event
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error parsing log line: {e}")
             return None
-    
+
     async def process_log_data(self, log_data: str, server_config: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Process multiple log lines and return parsed events"""
         events = []
         lines = log_data.split('\n')
-        
+
         logger.info(f"Processing {len(lines)} log lines from {server_config.get('name', 'Unknown')}")
-        
+
         connection_count = 0
         event_count = 0
-        
+
         for line in lines:
             parsed = self.parse_log_line(line)
             if parsed:
@@ -143,55 +151,55 @@ class ScalableUnifiedProcessor:
                 parsed['guild_id'] = server_config.get('guild_id')
                 parsed['server_id'] = server_config.get('server_id', 'Unknown')
                 events.append(parsed)
-                
+
                 if parsed['type'] == 'connection':
                     connection_count += 1
                 elif parsed['type'] == 'event':
                     event_count += 1
-        
+
         logger.info(f"Parsed {len(events)} total events: {connection_count} connections, {event_count} game events")
-        
+
         # Log sample of first few lines for debugging
         if not events and len(lines) > 10:
             logger.info("Sample log lines for debugging:")
             for i, line in enumerate(lines[:5]):
                 if line.strip():
                     logger.info(f"  Line {i}: {line[:100]}...")
-        
+
         return events
-    
+
     async def update_player_sessions(self, events: List[Dict[str, Any]]) -> bool:
         """Update player session states based on connection events using EOS ID tracking"""
         if not self.bot.db_manager:
             return False
-        
+
         try:
             state_changes = []  # Track actual state changes for embed sending
-            
+
             for event in events:
                 if event['type'] != 'connection':
                     continue
-                
+
                 eos_id = event.get('eos_id')
                 guild_id = event['guild_id']
                 server_id = event['server_id']
                 timestamp = event['timestamp']
                 event_type = event['event']
-                
+
                 if not eos_id:
                     continue
-                
+
                 # Get current player state
                 current_session = await self.bot.db_manager.player_sessions.find_one({
                     'eos_id': eos_id,
                     'guild_id': guild_id,
                     'server_id': server_id
                 })
-                
+
                 current_state = current_session.get('state', 'offline') if current_session else 'offline'
                 new_state = current_state
                 player_data = {}
-                
+
                 if event_type == 'player_queue':
                     # Player is queuing to join
                     new_state = 'queued'
@@ -205,7 +213,7 @@ class ScalableUnifiedProcessor:
                         'queued_at': timestamp,
                         'last_seen': timestamp
                     }
-                    
+
                 elif event_type == 'player_connect':
                     # Player successfully registered (queued -> online)
                     new_state = 'online'
@@ -214,7 +222,7 @@ class ScalableUnifiedProcessor:
                         'joined_at': timestamp,
                         'last_seen': timestamp
                     }
-                    
+
                 elif event_type == 'player_disconnect':
                     # Player disconnected (online -> offline)
                     new_state = 'offline'
@@ -223,7 +231,7 @@ class ScalableUnifiedProcessor:
                         'left_at': timestamp,
                         'last_seen': timestamp
                     }
-                
+
                 # Only update if state actually changed
                 if new_state != current_state:
                     await self.bot.db_manager.player_sessions.update_one(
@@ -235,7 +243,7 @@ class ScalableUnifiedProcessor:
                         {'$set': player_data},
                         upsert=True
                     )
-                    
+
                     # Track state change for embed sending
                     state_changes.append({
                         'eos_id': eos_id,
@@ -246,31 +254,31 @@ class ScalableUnifiedProcessor:
                         'guild_id': guild_id,
                         'server_id': server_id
                     })
-                    
+
                     logger.info(f"Player state change: {eos_id[:8]}... {current_state} -> {new_state}")
-            
+
             # Send embeds for actual state changes
             if state_changes:
                 await self._send_connection_embeds(state_changes)
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to update player sessions: {e}")
             return False
-    
+
     async def _send_connection_embeds(self, state_changes: List[Dict[str, Any]]) -> bool:
         """Send connection embeds using themed embed factory"""
         try:
             from bot.utils.channel_router import ChannelRouter
             from bot.utils.embed_factory import EmbedFactory
-            
+
             channel_router = ChannelRouter(self.bot)
-            
+
             for change in state_changes:
                 embed = None
                 channel_type = 'connections'  # Use connections channel for player events
-                
+
                 # Only send embeds for specific state transitions
                 if change['old_state'] == 'queued' and change['new_state'] == 'online':
                     # Player connected (queued -> online)
@@ -281,7 +289,7 @@ class ScalableUnifiedProcessor:
                         'timestamp': change.get('timestamp')
                     }
                     embed = EmbedFactory.create_player_connect_embed(embed_data)
-                
+
                 elif change['old_state'] == 'online' and change['new_state'] == 'offline':
                     # Player disconnected (online -> offline)
                     embed_data = {
@@ -291,7 +299,7 @@ class ScalableUnifiedProcessor:
                         'timestamp': change.get('timestamp')
                     }
                     embed = EmbedFactory.create_player_disconnect_embed(embed_data)
-                
+
                 if embed:
                     await channel_router.send_embed_to_channel(
                         guild_id=change['guild_id'],
@@ -299,24 +307,24 @@ class ScalableUnifiedProcessor:
                         channel_type=channel_type,
                         embed=embed
                     )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Error sending connection embeds batch: {e}")
             return False
-    
+
     async def send_event_embeds(self, events: List[Dict[str, Any]]) -> bool:
         """Send Discord embeds for game events using themed embed factory"""
         if not events:
             return True
-        
+
         try:
             from bot.utils.channel_router import ChannelRouter
             from bot.utils.embed_factory import EmbedFactory
-            
+
             channel_router = ChannelRouter(self.bot)
-            
+
             for event in events:
                 if event['type'] == 'event':
                     embed = await self._create_themed_embed(event)
@@ -328,19 +336,19 @@ class ScalableUnifiedProcessor:
                             channel_type=channel_type,
                             embed=embed
                         )
-            
+
             return True
-            
+
         except Exception as e:
             logger.error(f"Failed to send event embeds: {e}")
             return False
-    
+
     async def _create_themed_embed(self, event: Dict[str, Any]):
         """Create themed embed using embed factory"""
         try:
             from bot.utils.embed_factory import EmbedFactory
             event_type = event['event']
-            
+
             if event_type == 'mission_start':
                 mission_name = event['details'][0] if event['details'] else 'Unknown Mission'
                 embed_data = {
@@ -349,7 +357,7 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_mission_embed(embed_data)
-                
+
             elif event_type == 'mission_end':
                 mission_name = event['details'][0] if event['details'] else 'Unknown Mission'
                 embed_data = {
@@ -359,21 +367,21 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_mission_embed(embed_data)
-                
+
             elif event_type in ['airdrop_flying', 'airdrop_dropping']:
                 embed_data = {
                     'server_name': event.get('server_name', 'Unknown'),
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_airdrop_embed(embed_data)
-                
+
             elif event_type in ['helicrash_ready', 'helicrash_crash']:
                 embed_data = {
                     'server_name': event.get('server_name', 'Unknown'),
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_helicrash_embed(embed_data)
-                
+
             elif event_type in ['trader_arrival', 'trader_departure']:
                 embed_data = {
                     'trader_name': 'Trader',
@@ -381,13 +389,13 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_trader_embed(embed_data)
-            
+
             return None
-            
+
         except Exception as e:
             logger.error(f"Error creating themed embed: {e}")
             return None
-    
+
     def _map_event_to_channel_type(self, event_type: str) -> str:
         """Map event types to channel types"""
         mapping = {
@@ -404,7 +412,7 @@ class ScalableUnifiedProcessor:
             'vehicle_del': 'events'
         }
         return mapping.get(event_type, 'events')
-    
+
     def _normalize_event_data(self, event_type: str, match_groups: tuple, timestamp: datetime, raw_message: str) -> Optional[Dict[str, Any]]:
         """Advanced normalization for mission and event data"""
         normalized = {
@@ -414,70 +422,70 @@ class ScalableUnifiedProcessor:
             'details': match_groups,
             'raw_message': raw_message
         }
-        
+
         # Mission normalization with level and state filtering
         if event_type in ['mission_start', 'mission_end']:
             mission_name = match_groups[0] if match_groups else 'Unknown Mission'
             mission_level = self._extract_mission_level(mission_name)
-            
+
             # Block missions below level 3
             if mission_level < 3:
                 return None  # Skip low-level missions
-            
+
             # Only output missions in READY state (mission_start), skip WAITING state
             if event_type == 'mission_end':
                 return None  # Skip mission end events
-            
+
             # Normalize mission names for consistent display
             normalized['mission_name'] = self._normalize_mission_name(mission_name)
             normalized['mission_state'] = 'READY'
             normalized['mission_level'] = mission_level
-            
+
         # Airdrop normalization - only output when Flying (spawn event)
         elif event_type in ['airdrop_flying', 'airdrop_dropping', 'airdrop_dead']:
             # Only output airdrop when it starts flying (spawn event), skip other states
             if event_type != 'airdrop_flying':
                 return None  # Skip dropping and dead states
-            
+
             normalized['airdrop_state'] = 'FLYING'
             normalized['event_priority'] = 'high'
-            
+
         # Helicrash normalization - only output when spawning/ready
         elif event_type in ['helicrash_ready', 'helicrash_crash']:
             # Only output helicrash when it becomes ready (spawn event), skip crash state
             if event_type != 'helicrash_ready':
                 return None  # Skip crash events
-            
+
             normalized['helicrash_state'] = 'READY'
             normalized['event_priority'] = 'high'
-            
+
         # Trader normalization - only output when arriving/spawning
         elif event_type in ['trader_arrival', 'trader_departure']:
             # Only output trader when arriving (spawn event), skip departure
             if event_type != 'trader_arrival':
                 return None  # Skip departure events
-            
+
             normalized['trader_state'] = 'ARRIVED'
             normalized['event_priority'] = 'medium'
-            
+
         # Vehicle event normalization
         elif event_type in ['vehicle_add', 'vehicle_del']:
             vehicle_count = int(match_groups[0]) if match_groups and match_groups[0].isdigit() else 0
             normalized['vehicle_count'] = vehicle_count
             normalized['vehicle_action'] = 'added' if event_type == 'vehicle_add' else 'removed'
-            
+
         return normalized
-    
+
     def _normalize_mission_name(self, mission_name: str) -> str:
         """Normalize mission names for consistent display"""
         # Remove GA_ prefix and convert to readable format
         if mission_name.startswith('GA_'):
             mission_name = mission_name[3:]
-        
+
         # Convert underscores to spaces and capitalize
         parts = mission_name.split('_')
         normalized_parts = []
-        
+
         for part in parts:
             if part.lower() == 'mis' or part.lower().startswith('mis'):
                 continue  # Skip mission indicators
@@ -485,9 +493,9 @@ class ScalableUnifiedProcessor:
                 normalized_parts.append(f"#{part}")
             else:
                 normalized_parts.append(part.capitalize())
-        
+
         return ' '.join(normalized_parts) if normalized_parts else mission_name
-    
+
     def _extract_mission_level(self, mission_name: str) -> int:
         """Extract mission difficulty level from name"""
         # Look for numbers in mission name that indicate level
@@ -505,7 +513,7 @@ class ScalableUnifiedProcessor:
             log_data = await self._fetch_server_logs(server_config)
             if not log_data:
                 return []
-            
+
             events = []
             for line in log_data.split('\n'):
                 parsed = self.parse_log_line(line)
@@ -514,15 +522,15 @@ class ScalableUnifiedProcessor:
                     parsed['server_id'] = server_config.get('server_id', 'default')
                     parsed['server_name'] = server_config.get('server_name', 'Unknown')
                     events.append(parsed)
-            
+
             # Sort chronologically
             events.sort(key=lambda x: x.get('timestamp', ''))
             return events
-            
+
         except Exception as e:
             logger.error(f"Error in cold start processing: {e}")
             return []
-    
+
     async def process_log_data_hot_start(self, server_config: Dict[str, Any], guild_id: int, last_timestamp: Optional[str]) -> List[Dict[str, Any]]:
         """Process only new log data since last timestamp for hot start"""
         try:
@@ -530,7 +538,7 @@ class ScalableUnifiedProcessor:
             log_data = await self._fetch_server_logs(server_config)
             if not log_data:
                 return []
-            
+
             events = []
             for line in log_data.split('\n'):
                 parsed = self.parse_log_line(line)
@@ -538,36 +546,36 @@ class ScalableUnifiedProcessor:
                     # Only include events newer than last timestamp
                     if last_timestamp and parsed.get('timestamp', '') <= last_timestamp:
                         continue
-                        
+
                     parsed['guild_id'] = guild_id
                     parsed['server_id'] = server_config.get('server_id', 'default')
                     parsed['server_name'] = server_config.get('server_name', 'Unknown')
                     events.append(parsed)
-            
+
             # Sort chronologically
             events.sort(key=lambda x: x.get('timestamp', ''))
             return events
-            
+
         except Exception as e:
             logger.error(f"Error in hot start processing: {e}")
             return []
-    
+
     async def update_player_sessions_cold(self, events: List[Dict[str, Any]], guild_id: int, server_id: str):
         """Update player sessions for cold start - chronological processing to determine current state"""
         try:
             # Track player states chronologically
             player_states = {}
             valid_events = 0
-            
+
             # Process events chronologically to determine final states
             for event in events:
                 if event.get('type') != 'connection' or not event.get('eos_id'):
                     continue
-                
+
                 eos_id = event.get('eos_id')
                 event_type = event.get('event')
                 timestamp = event.get('timestamp')
-                
+
                 # Initialize player if not seen before
                 if eos_id not in player_states:
                     player_states[eos_id] = {
@@ -580,7 +588,7 @@ class ScalableUnifiedProcessor:
                         'last_updated': timestamp,
                         'last_seen': timestamp
                     }
-                
+
                 # Update state based on event type
                 if event_type == 'player_queue':
                     player_states[eos_id]['state'] = 'queued'
@@ -591,105 +599,182 @@ class ScalableUnifiedProcessor:
                 elif event_type == 'player_disconnect':
                     player_states[eos_id]['state'] = 'offline'
                     player_states[eos_id]['left_at'] = timestamp
-                
+
                 player_states[eos_id]['last_seen'] = timestamp
                 player_states[eos_id]['last_updated'] = timestamp
                 valid_events += 1
-            
+
             # Clear existing sessions for this server
             await self.bot.db_manager.player_sessions.delete_many({
                 'guild_id': guild_id,
                 'server_id': server_id
             })
-            
+
             # Insert final states (only active players)
             active_sessions = []
             for eos_id, player_data in player_states.items():
                 if player_data['state'] in ['online', 'queued']:  # Only store active players
                     active_sessions.append(player_data)
-            
+
             if active_sessions:
                 await self.bot.db_manager.player_sessions.insert_many(active_sessions)
-            
+
             # Count final states
             online_count = sum(1 for p in player_states.values() if p['state'] == 'online')
             queued_count = sum(1 for p in player_states.values() if p['state'] == 'queued')
-            
+
             logger.info(f"Cold start: Updated player sessions for {valid_events} valid events out of {len(events)} total")
             logger.info(f"Cold start: Final state - {online_count} online, {queued_count} queued players")
-            
+
             return online_count, queued_count
-            
+
         except Exception as e:
             logger.error(f"Error updating player sessions in cold start: {e}")
             return 0, 0
-    
-    async def send_connection_embeds_batch(self, state_changes: List[Dict[str, Any]]):
-        """Send connection embeds using embed factory"""
+
+    async def send_connection_embeds_batch(self, state_changes: List[Dict]):
+        """Send connection embeds using batch processing with proper EmbedFactory integration"""
         try:
+            if not state_changes:
+                return
+
             from bot.utils.embed_factory import EmbedFactory
-            from bot.utils.channel_router import ChannelRouter
-            
-            embed_factory = EmbedFactory()
-            channel_router = ChannelRouter(self.bot)
-            
+
             for change in state_changes:
-                if change['old_state'] == 'queued' and change['new_state'] == 'online':
-                    # Player connected - use embed factory
-                    embed = embed_factory.create_player_connect_embed(change)
-                    
-                    await channel_router.send_embed_to_channel(
-                        guild_id=change['guild_id'],
-                        server_id=change['server_id'],
-                        channel_type='killfeed',
-                        embed=embed
-                    )
-                
-                elif change['old_state'] == 'online' and change['new_state'] == 'offline':
-                    # Player disconnected - use embed factory
-                    embed = embed_factory.create_player_disconnect_embed(change)
-                    
-                    await channel_router.send_embed_to_channel(
-                        guild_id=change['guild_id'],
-                        server_id=change['server_id'],
-                        channel_type='killfeed',
-                        embed=embed
-                    )
-                    
+                guild_id = change.get('guild_id')
+                server_id = change.get('server_id')
+
+                if change.get('event_type') == 'connect':
+                    embed_data = {
+                        'player_name': change.get('player_name'),
+                        'platform': change.get('platform', 'PC'),
+                        'server_name': change.get('server_name', 'Unknown'),
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build connection embed
+                    embed, file_attachment = await EmbedFactory.build('connection', embed_data)
+
+                    # Use channel router to send to appropriate channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'events', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send connection embed for {change.get('player_name')}")
+
+                elif change.get('event_type') == 'disconnect':
+                    embed_data = {
+                        'player_name': change.get('player_name'),
+                        'platform': change.get('platform', 'PC'),
+                        'server_name': change.get('server_name', 'Unknown'),
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build disconnection embed
+                    embed, file_attachment = await EmbedFactory.build('disconnection', embed_data)
+
+                    # Use channel router to send to appropriate channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'events', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send disconnection embed for {change.get('player_name')}")
+
         except Exception as e:
             logger.error(f"Error sending connection embeds batch: {e}")
-    
-    async def send_event_embeds_batch(self, game_events: List[Dict[str, Any]]):
-        """Send game event embeds using embed factory"""
+
+    async def send_event_embeds_batch(self, game_events: List[Dict]):
+        """Send game event embeds using batch processing with proper EmbedFactory integration"""
         try:
+            if not game_events:
+                return
+
             from bot.utils.embed_factory import EmbedFactory
-            from bot.utils.channel_router import ChannelRouter
-            
-            embed_factory = EmbedFactory()
-            channel_router = ChannelRouter(self.bot)
-            
+
             for event in game_events:
-                # Use advanced normalization and embed factory for consistent formatting
-                embed_result = await self._create_event_embed(event)
-                if embed_result:
-                    embed_data, channel_type = embed_result
-                    await channel_router.send_embed_to_channel(
-                        guild_id=event['guild_id'],
-                        server_id=event['server_id'],
-                        channel_type=channel_type,
-                        embed=embed_data
-                    )
-                    
+                guild_id = event.get('guild_id')
+                server_id = event.get('server_id')
+                event_type = event.get('event')
+
+                if event_type == 'mission_start':
+                    embed_data = {
+                        'mission_id': event.get('mission_id', 'Unknown'),
+                        'state': 'READY',
+                        'level': event.get('level', 1),
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build mission embed
+                    embed, file_attachment = await EmbedFactory.build('mission', embed_data)
+
+                    # Use channel router to send to missions channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'missions', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send mission embed for {event.get('mission_id')}")
+
+                elif event_type == 'airdrop':
+                    embed_data = {
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build airdrop embed
+                    embed, file_attachment = await EmbedFactory.build('airdrop', embed_data)
+
+                    # Use channel router to send to airdrop channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'airdrop', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send airdrop embed")
+
+                elif event_type == 'helicrash':
+                    embed_data = {
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build helicrash embed
+                    embed, file_attachment = await EmbedFactory.build('helicrash', embed_data)
+
+                    # Use channel router to send to helicrash channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'helicrash', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send helicrash embed")
+
+                elif event_type == 'trader':
+                    embed_data = {
+                        'guild_id': guild_id
+                    }
+
+                    # Use EmbedFactory to build trader embed
+                    embed, file_attachment = await EmbedFactory.build('trader', embed_data)
+
+                    # Use channel router to send to trader channel
+                    if hasattr(self.bot, 'channel_router'):
+                        success = await self.bot.channel_router.send_embed_to_channel(
+                            guild_id, server_id, 'trader', embed, file_attachment
+                        )
+                        if not success:
+                            logger.warning(f"Failed to send trader embed")
+
         except Exception as e:
             logger.error(f"Error sending event embeds batch: {e}")
-    
+
     async def _create_event_embed(self, event: Dict[str, Any]) -> Optional[tuple]:
         """Create professional Discord embed using embed factory"""
         try:
             from bot.utils.embed_factory import EmbedFactory
-            
+
             event_type = event.get('event')
-            
+
             if event_type in ['mission_start', 'mission_ready']:
                 embed_data = {
                     'mission_id': event.get('mission_name', event.get('mission_id', 'Unknown')),
@@ -699,7 +784,7 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_mission_embed(embed_data)
-                
+
             elif event_type in ['mission_end', 'mission_complete']:
                 embed_data = {
                     'mission_id': event.get('mission_name', event.get('mission_id', 'Unknown')),
@@ -709,7 +794,7 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_mission_embed(embed_data)
-                
+
             elif event_type == 'airdrop':
                 embed_data = {
                     'server_name': event.get('server_name', 'Unknown'),
@@ -717,7 +802,7 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_airdrop_embed(embed_data)
-                
+
             elif event_type == 'helicrash':
                 embed_data = {
                     'server_name': event.get('server_name', 'Unknown'),
@@ -725,7 +810,7 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_helicrash_embed(embed_data)
-                
+
             elif event_type == 'trader':
                 embed_data = {
                     'trader_name': event.get('trader_name', 'Unknown Trader'),
@@ -733,14 +818,14 @@ class ScalableUnifiedProcessor:
                     'timestamp': event.get('timestamp')
                 }
                 return await EmbedFactory.build_trader_embed(embed_data)
-                
+
             else:
                 return None
-                
+
         except Exception as e:
             logger.error(f"Error creating event embed with factory: {e}")
             return None
-    
+
     def _get_channel_type_for_event(self, event_type: str) -> str:
         """Get appropriate channel type for event"""
         if event_type in ['mission_start', 'mission_end']:
@@ -749,23 +834,23 @@ class ScalableUnifiedProcessor:
             return 'events'
         else:
             return 'events'
-    
+
     async def _update_single_player_session(self, event: Dict[str, Any], send_embeds: bool = True):
         """Update a single player session based on connection event"""
         try:
             from datetime import timezone
-            
+
             eos_id = event.get('eos_id')
             guild_id = event.get('guild_id')
             server_id = event.get('server_id')
-            
+
             # Skip events with missing critical data to prevent database errors
             if not eos_id or not guild_id or not server_id:
                 logger.debug(f"Skipping event with missing data: eos_id={eos_id}, guild_id={guild_id}, server_id={server_id}")
                 return
-                
+
             event_type = event.get('event')
-            
+
             if event_type == 'player_queue':
                 # Player joined queue
                 await self.bot.db_manager.player_sessions.update_one(
@@ -779,7 +864,7 @@ class ScalableUnifiedProcessor:
                     },
                     upsert=True
                 )
-                
+
             elif event_type == 'player_connect':
                 # Player connected
                 await self.bot.db_manager.player_sessions.update_one(
@@ -791,7 +876,7 @@ class ScalableUnifiedProcessor:
                         }
                     }
                 )
-                
+
             elif event_type == 'player_disconnect':
                 # Player disconnected
                 await self.bot.db_manager.player_sessions.update_one(
@@ -803,7 +888,7 @@ class ScalableUnifiedProcessor:
                         }
                     }
                 )
-                
+
         except Exception as e:
             # Skip duplicate key errors silently during cold start processing
             if "duplicate key error" not in str(e):
@@ -814,12 +899,12 @@ class ScalableUnifiedProcessor:
         try:
             import asyncssh
             from bot.utils.connection_pool import connection_manager
-            
+
             # Priority order for SSH credentials:
             # 1. sftp_credentials (preferred)
             # 2. individual ssh_* fields
             # 3. legacy host/username/password fields
-            
+
             sftp_creds = server_config.get('sftp_credentials', {})
             if sftp_creds:
                 ssh_host = sftp_creds.get('host', '').strip()
@@ -832,18 +917,18 @@ class ScalableUnifiedProcessor:
                 ssh_username = server_config.get('ssh_username') or server_config.get('username')
                 ssh_password = server_config.get('ssh_password') or server_config.get('password')
                 ssh_port = server_config.get('ssh_port') or server_config.get('port', 22)
-            
+
             if not all([ssh_host, ssh_username, ssh_password]):
                 logger.error(f"Server {server_config.get('server_name', 'Unknown')} missing SSH credentials in database")
                 return ""
-            
+
             # Build dynamic log path: ./{host}_{_id}/Logs/Deadside.log
             server_id = server_config.get('_id') or server_config.get('server_id')
             log_path = f"./{ssh_host}_{server_id}/Logs/Deadside.log"
-            
+
             logger.info(f"Connecting to {ssh_host}:{ssh_port} as {ssh_username} for {server_config.get('server_name', 'Unknown')}")
             logger.info(f"Using dynamic log path: {log_path}")
-            
+
             # Create connection config for the robust connection manager
             connection_config = {
                 'host': ssh_host,
@@ -851,7 +936,7 @@ class ScalableUnifiedProcessor:
                 'username': ssh_username,
                 'password': ssh_password
             }
-            
+
             # Use the same robust connection manager as killfeed parser
             guild_id = server_config.get('guild_id', 1219706687980568769)
             async with connection_manager.get_connection(guild_id, connection_config) as conn:
@@ -864,7 +949,7 @@ class ScalableUnifiedProcessor:
                     except Exception as e:
                         logger.error(f"Failed to read log file {log_path}: {e}")
                         return ""
-                        
+
         except Exception as e:
             logger.error(f"Error fetching server logs: {e}")
             return ""

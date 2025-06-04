@@ -187,5 +187,9 @@ class VoiceChannelManager:
     
     async def _get_server_name(self, guild_id: int, server_id: str) -> Optional[str]:
         """Get server name from configuration"""
-        server_name, _ = await self._get_server_info(guild_id, server_id)
-        return server_name
+        try:
+            server_name, _ = await self._get_server_info(guild_id, server_id)
+            return server_name
+        except Exception as e:
+            logger.error(f"Error getting server name for {server_id}: {e}")
+            return None
