@@ -16,22 +16,18 @@ import traceback
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-# Clean up any conflicting discord modules before importing
-for module_name in list(sys.modules.keys()):
-    if module_name == 'discord' or module_name.startswith('discord.'):
-        del sys.modules[module_name]
-import discord_py_blocker  # Block discord.py imports
-
-
-# Import py-cord v2.6.1
+# Import py-cord v2.6.1 first
 try:
     import discord
     from discord.ext import commands
-    print(f"✅ Successfully imported py-cord")
+    print(f"✅ Successfully imported py-cord version: {discord.__version__}")
 except ImportError as e:
     print(f"❌ Error importing py-cord: {e}")
     print("Please ensure py-cord 2.6.1 is installed")
     sys.exit(1)
+
+# Block discord.py imports after successful py-cord import
+import discord_py_blocker
 
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -60,7 +56,7 @@ from bot.parsers.unified_log_parser import UnifiedLogParser
 from bot.utils.task_pool import get_task_pool, shutdown_task_pool, dispatch_background_with_lock
 from bot.utils.threaded_parser_wrapper import ThreadedParserWrapper
 
-# Load environment variables (optional for Railway)
+# Load environment variables
 load_dotenv()
 
 # Detect Railway environment
@@ -70,27 +66,19 @@ if RAILWAY_ENV:
 else:
     print("🖥️ Running in local/development environment")
 
-# Import Railway keep-alive server
-from keep_alive import keep_alive
-
 # Set runtime mode to production
 MODE = os.getenv("MODE", "production")
 print(f"Runtime mode set to: {MODE}")
 
-# Start keep-alive server for Railway deployment
+# Import and start keep-alive server for Railway deployment
 if MODE == "production" or RAILWAY_ENV:
-    print("🚀 Starting Railway keep-alive server...")
-    keep_alive()
+    try:
+        from keep_alive import keep_alive
+        print("🚀 Starting Railway keep-alive server...")
+        keep_alive()
+    except ImportError:
+        print("⚠️ Keep-alive server not available - continuing without it")
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
 logger = logging.getLogger(__name__)
 
 class EmeraldKillfeedBot(discord.Bot):
@@ -620,23 +608,30 @@ class EmeraldKillfeedBot(discord.Bot):
         """Called when bot is ready and connected to Discord"""
         # Only run setup once
         if hasattr(self, '_setup_complete'):
+            logger.info("Bot already setup, skipping duplicate setup")
             return
 
-        logger.info("🚀 Bot is ready! Starting bulletproof setup...")
+        logger.info("🚀 Bot is ready! Starting setup...")
+        
+        # Set flag immediately to prevent re-entry
+        self._setup_complete = True
 
         try:
-            # Add overall startup timeout
-            startup_start = asyncio.get_event_loop().time()
+            startup_start = time.time()
             
-            # STEP 1: Load cogs with proper async loading
-            logger.info("🔧 Loading cogs for command registration...")
-            cogs_success = await self.load_cogs()
-
-            if not cogs_success:
-                logger.error("❌ Cog loading failed - aborting setup")
+            # Basic startup without complex async operations
+            logger.info("🔧 Loading cogs...")
+            try:
+                loaded_count, failed_cogs = await asyncio.wait_for(self.load_cogs(), timeout=30.0)
+                logger.info(f"✅ Loaded {loaded_count} cogs")
+                if failed_cogs:
+                    logger.warning(f"⚠️ Failed cogs: {failed_cogs}")
+            except asyncio.TimeoutError:
+                logger.error("❌ Cog loading timed out")
                 return
-
-            logger.info("✅ Cog loading: Complete")
+            except Exception as e:
+                logger.error(f"❌ Cog loading failed: {e}")
+                return
 
             # STEP 2: Verify commands are actually registered (py-cord 2.6.1 compatible)
             command_count = 0
@@ -1051,82 +1046,32 @@ class EmeraldKillfeedBot(discord.Bot):
 
 async def main():
     """Main entry point"""
-    # Check required environment variables for Railway deployment
+    print("🚀 Starting bot...")
+    
+    # Check required environment variables
     bot_token = os.getenv('BOT_TOKEN') or os.getenv('DISCORD_TOKEN')
     mongo_uri = os.getenv('MONGO_URI') or os.getenv('MONGODB_URI')
-    tip4serv_key = os.getenv('TIP4SERV_KEY')  # Optional service key
-
-    # Railway environment detection
-    railway_env = os.getenv('RAILWAY_ENVIRONMENT') or os.getenv('RAILWAY_STATIC_URL')
-    if railway_env:
-        print(f"✅ Railway environment detected")
 
     # Validate required secrets
     if not bot_token:
-        logger.error("❌ BOT_TOKEN not found in environment variables")
-        logger.error("Please set BOT_TOKEN in your Railway environment variables")
+        print("❌ BOT_TOKEN not found in environment variables")
+        print("Please set BOT_TOKEN in the Secrets tab")
         return
 
     if not mongo_uri:
-        logger.error("❌ MONGO_URI not found in environment variables") 
-        logger.error("Please set MONGO_URI in your Railway environment variables")
+        print("❌ MONGO_URI not found in environment variables") 
+        print("Please set MONGO_URI in the Secrets tab")
         return
 
-    # Log startup success
-    logger.info(f"✅ Bot starting with token: {'*' * 20}...{bot_token[-4:] if bot_token else 'MISSING'}")
-    logger.info(f"✅ MongoDB URI configured: {'*' * 20}...{mongo_uri[-10:] if mongo_uri else 'MISSING'}")
-    if tip4serv_key:
-        logger.info(f"✅ TIP4SERV_KEY configured: {'*' * 10}...{tip4serv_key[-4:]}")
-    else:
-        logger.info("ℹ️ TIP4SERV_KEY not configured (optional)")
+    print(f"✅ Bot token configured")
+    print(f"✅ MongoDB URI configured")
 
     # Create and run bot
     print("Creating bot instance...")
     bot = EmeraldKillfeedBot()
 
     try:
-        # Initialize database and parsers
-        logger.info("🚀 Starting database and parser setup...")
-        
-        # Database initialization will be handled in setup_database
-
-        # Connect to database
-        bot.mongo_client = AsyncIOMotorClient(mongo_uri)
-        await bot.mongo_client.admin.command('ping')
-        logger.info("Successfully connected to MongoDB")
-
-        # Initialize database manager with caching
-        from bot.utils.unified_cache import initialize_cache
-        from bot.utils.cache_integration import create_cached_database_manager
-        from bot.utils.premium_manager_v2 import PremiumManagerV2
-        
-        # Initialize cache system
-        await initialize_cache()
-        
-        # Create base database manager
-        base_db_manager = DatabaseManager(bot.mongo_client)
-        
-        # Use direct database manager to avoid cache blocking issues
-        bot.db_manager = base_db_manager
-        
-        # Store cached version separately for parsers
-        setattr(bot, "cached_db_manager", create_cached_database_manager(base_db_manager))
-        
-        # Initialize premium manager v2 with cached database
-        bot.premium_manager_v2 = PremiumManagerV2(bot.db_manager)
-        bot.premium_manager = bot.premium_manager_v2
-
-        # Perform database cleanup and initialization with timeout
-        logger.info("🧹 Performing database cleanup and initialization...")
-        try:
-            await asyncio.wait_for(bot.db_manager.initialize_indexes(), timeout=30.0)
-            logger.info("Database architecture initialized (PHASE 1)")
-        except asyncio.TimeoutError:
-            logger.warning("Database initialization timed out - continuing with basic setup")
-        except Exception as db_init_error:
-            logger.error(f"Database initialization failed: {db_init_error} - continuing anyway")
-            logger.info("Database architecture initialized (PHASE 1 - limited mode)")
-
+        print("Starting bot...")
         await bot.start(bot_token)
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, shutting down...")
