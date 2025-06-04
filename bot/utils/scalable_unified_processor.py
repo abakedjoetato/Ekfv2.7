@@ -1,11 +1,3 @@
-` tags.
-
-```text
-Applying EmbedFactory integration and channel routing fixes to the ScalableUnifiedProcessor class.
-```
-
-```
-<replit_final_file>
 """
 Scalable Unified Processor - Fixed Version
 Handles log parsing and event detection with proper syntax

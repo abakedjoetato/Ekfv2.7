@@ -756,7 +756,14 @@ class EmeraldKillfeedBot(discord.Bot):
                 except Exception as e:
                     logger.error(f"Failed to schedule unified log parser: {e}")
 
-            # STEP 7: Final status
+            # STEP 7: Enable automated leaderboard if not already running
+            automated_leaderboard_cog = self.get_cog('AutomatedLeaderboard')
+            if automated_leaderboard_cog and not automated_leaderboard_cog.automated_leaderboard_task.is_running():
+                logger.info("🔄 Starting automated leaderboard task...")
+                automated_leaderboard_cog.automated_leaderboard_task.start()
+                logger.info("✅ Automated leaderboard task started")
+
+            # STEP 8: Final status
             if self.user:
                 logger.info("✅ Bot logged in as %s (ID: %s)", self.user.name, self.user.id)
             logger.info("✅ Connected to %d guilds", len(self.guilds))
@@ -785,7 +792,7 @@ class EmeraldKillfeedBot(discord.Bot):
                 logger.warning("⚠️ Assets directory not found - creating default structure")
                 self.assets_path.mkdir(exist_ok=True)
 
-            # STEP 8: Register commands with Discord
+            # STEP 9: Register commands with Discord
             logger.info("🔄 Registering commands with Discord...")
             await self.register_commands_safely()
             
