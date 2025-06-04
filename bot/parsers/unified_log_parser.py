@@ -451,27 +451,9 @@ class UnifiedLogParser:
                     return 'killfeed'
             return 'events'  # Default fallback
         except Exception:
-            return 'events'el_type(self, embed) -> str:
-        """Determine appropriate channel type based on embed content"""
-        if not embed or not hasattr(embed, 'title'):
-            return 'killfeed'
-            
-        title = embed.title.lower() if embed.title else ""
-        
-        # Check for connection/disconnection embeds
-        if any(keyword in title for keyword in ['reinforcements', 'operative deployed', 'extraction', 'withdrawn']):
-            return 'connections'
-        
-        # Check for mission embeds  
-        if any(keyword in title for keyword in ['mission', 'operation', 'classified', 'objective']):
             return 'events'
             
-        # Check for airdrop/helicrash embeds
-        if any(keyword in title for keyword in ['airdrop', 'supply', 'helicrash', 'helicopter']):
-            return 'events'
-            
-        # Default to killfeed for combat/kills
-        return 'killfeed'
+    
             
     async def update_voice_channel(self, guild_id: int, server_id: str, server_name: str):
         """Update voice channel with current player count"""
