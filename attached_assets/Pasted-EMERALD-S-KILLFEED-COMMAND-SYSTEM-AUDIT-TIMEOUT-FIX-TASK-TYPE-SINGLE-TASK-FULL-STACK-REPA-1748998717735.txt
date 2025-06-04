@@ -1,0 +1,131 @@
+EMERALD'S KILLFEED — COMMAND SYSTEM AUDIT & TIMEOUT FIX
+
+🧩 TASK TYPE: SINGLE TASK — FULL-STACK REPAIR
+
+This task must be completed as a single uninterrupted batch operation. Do not checkpoint, commit, or output until every step has been executed, all issues are fixed, and commands are confirmed responsive in production.
+
+
+---
+
+# [PHASE 1] — COMMAND EXECUTION AUDIT & TIMEOUT DIAGNOSIS
+
+⚠️ Observed Issue:
+
+Most slash commands time out without responding
+
+Commands appear to defer but never reply
+
+Commands may not correctly interact with the database or embed systems
+
+
+
+---
+
+🔬 Objectives:
+
+1. Audit every slash command definition
+
+Ensure they all use @discord.slash_command() and discord.Option(...) correctly
+
+Confirm that await ctx.defer() is used only when necessary
+
+Check that ctx.followup.send(...) or ctx.respond(...) is always called and not skipped
+
+
+
+2. Review database access logic
+
+Confirm all calls to db_manager match actual method definitions
+
+Patch invalid or misaligned queries (e.g., calling non-existent methods or wrong parameters)
+
+Ensure all queries await properly (e.g., await self.bot.db_manager.method(...))
+
+Avoid .then()-style or sync-like chaining from older discord.py paradigms
+
+
+
+3. Enforce Pycord 2.6.1 compliance
+
+Remove all legacy syntax from discord.py
+
+Replace @bot.command, commands.Context, ctx.send() etc. with their Pycord slash equivalents
+
+Remove any use of commands.Cog.listener() in favor of Pycord’s @bot.event
+
+
+
+4. Validate interoperation between commands and other systems
+
+Ensure each command interacts correctly with:
+
+Guild/server isolation
+
+EmbedFactory usage
+
+MongoDB document structure
+
+Parsers, SFTP logic, and stats handlers
+
+
+
+
+5. Fix logic flow issues
+
+Check for any infinite loops, await chains that never resolve, or circular logic that may prevent response
+
+Ensure commands never call blocking operations or misstructured async tasks
+
+Confirm each command has a clear endpoint and return statement
+
+
+
+6. Command Timeout Repair
+
+Diagnose cause of timeout by tracing each command's execution start to finish
+
+If a command takes longer than 3 seconds before responding, move processing to a background task or thread
+
+Use ctx.defer() appropriately and always follow with a reply (even if error)
+
+
+
+
+
+---
+
+✅ COMPLETION CHECKLIST:
+
+[ ] All slash commands correctly respond with no timeouts
+
+[ ] Commands do not enter infinite loops or crash silently
+
+[ ] Each command uses proper Pycord 2.6.1 structure
+
+[ ] Commands align with actual db_manager methods (no undefined calls)
+
+[ ] All commands reply with valid embeds using EmbedFactory
+
+[ ] No unresolved exceptions or stack traces in terminal
+
+[ ] Slash commands reflect correct isolation for guild/server
+
+[ ] Commands interoperate with all other systems cleanly
+
+
+
+---
+
+🔒 EXECUTION RULES
+
+This is a single batch task
+
+Do not checkpoint, log, or output early
+
+You must complete all command auditing and fixes before responding
+
+Treat missing replies as system failures — resolve root cause
+
+You may not skip or stub any command logic
+
+Validate all logic with live testing before considering the task complete
