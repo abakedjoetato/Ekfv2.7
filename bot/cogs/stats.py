@@ -729,6 +729,7 @@ class Stats(discord.Cog):
             logger.error(f"Data validation failed: {e}")
             return False
 
+    @discord.slash_command(name="compare", description="Compare your stats with another player")
     async def compare(self, ctx: discord.ApplicationContext, user: discord.Member):
         """Compare your stats with another player"""
         try:
@@ -981,3 +982,50 @@ class Stats(discord.Cog):
                     title="🌐 No Players Online",
                     description="No players are currently online on any server.",
                     color=0xFFAA00
+                )
+                await ctx.followup.send(embed=embed)
+                return
+            
+            # Group players by server
+            servers = {}
+            for session in sessions:
+                server_name = session.get('server_name', 'Unknown Server')
+                if server_name not in servers:
+                    servers[server_name] = []
+                servers[server_name].append(session.get('player_name', 'Unknown Player'))
+            
+            # Create embed with player list
+            embed = discord.Embed(
+                title="🌐 Online Players",
+                color=0x00FF00,
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            for server_name, players in servers.items():
+                player_list = '\n'.join([f"• {player}" for player in players[:10]])  # Limit to 10 per server
+                if len(players) > 10:
+                    player_list += f"\n... and {len(players) - 10} more"
+                
+                embed.add_field(
+                    name=f"{server_name} ({len(players)} online)",
+                    value=player_list or "No players",
+                    inline=False
+                )
+            
+            embed.set_footer(text="Powered by Discord.gg/EmeraldServers")
+            await ctx.followup.send(embed=embed)
+            
+        except Exception as e:
+            logger.error(f"Failed to show online players: {e}")
+            embed = discord.Embed(
+                title="❌ Error",
+                description="Failed to retrieve online player data.",
+                color=0xFF0000
+            )
+            try:
+                await ctx.followup.send(embed=embed, ephemeral=True)
+            except discord.errors.NotFound:
+                logger.warning("Interaction expired, cannot send error response")
+
+def setup(bot):
+    bot.add_cog(Stats(bot))
