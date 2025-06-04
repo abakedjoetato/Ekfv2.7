@@ -126,7 +126,7 @@ class AdminBatch(discord.Cog):
             await ctx.respond(f"Error debugging player count: {str(e)}", ephemeral=True)
 
     @discord.slash_command(name="reset_player_count", description="Reset player count tracking for a server")
-    @commands.has_permissions(administrator=True)
+    @discord.default_permissions(administrator=True)
     async def reset_player_count(self, ctx: discord.ApplicationContext, server_id: str):
         """Reset player count tracking for a server"""
         if not ctx.guild:
