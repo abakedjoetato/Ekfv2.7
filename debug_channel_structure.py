@@ -13,9 +13,9 @@ async def debug_channel_structure():
     """Debug actual channel configuration in database"""
     try:
         # Create database connection like the bot does
-        mongo_client = pymongo.MongoClient(os.getenv('MONGO_URI'))
+        mongo_client = AsyncIOMotorClient(os.getenv('MONGO_URI'))
         db_manager = DatabaseManager(mongo_client)
-        await db_manager.initialize()
+        await db_manager.initialize_database()
         
         guild_id = 1219706687980568769
         

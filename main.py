@@ -255,8 +255,8 @@ class EmeraldKillfeedBot(commands.Bot):
                 with open(cooldown_file, 'r') as f:
                     cooldown_until = datetime.fromisoformat(f.read().strip())
                 
-                if datetime.utcnow() < cooldown_until:
-                    remaining = (cooldown_until - datetime.utcnow()).total_seconds()
+                if datetime.now(timezone.utc) < cooldown_until:
+                    remaining = (cooldown_until - datetime.now(timezone.utc)).total_seconds()
                     logger.info(f"⏰ Global sync in cooldown for {remaining:.0f}s - attempting guild-specific sync...")
                     
                     # Try guild-specific sync during cooldown
@@ -355,7 +355,7 @@ class EmeraldKillfeedBot(commands.Bot):
                         logger.info(f"✅ Global commands synced successfully: {len(synced) if synced else 0} commands")
                         
                         # Set protective cooldown after successful sync
-                        cooldown_time = datetime.utcnow() + timedelta(hours=6)
+                        cooldown_time = datetime.now(timezone.utc) + timedelta(hours=6)
                         with open(cooldown_file, 'w') as f:
                             f.write(cooldown_time.isoformat())
                     except asyncio.TimeoutError:
@@ -508,7 +508,7 @@ class EmeraldKillfeedBot(commands.Bot):
             logger.error(f"Failed to cleanup {parser_name} parser connections: {e}")
 
     async def setup_database(self):
-        """Setup MongoDB connection with proper loop management"""
+        """Setup MongoDB connection with Atlas-only logic and comprehensive error handling"""
         try:
             # Set main loop for thread-safe operations
             main_loop = asyncio.get_running_loop()
@@ -519,20 +519,32 @@ class EmeraldKillfeedBot(commands.Bot):
             from bot.models.database import DatabaseManager
             from bot.utils.thread_safe_db_wrapper import ThreadSafeDBWrapper
             
-            # Test basic connection first
-            logger.info("Testing MongoDB connection...")
+            # Get MongoDB URI from environment - Atlas only
+            mongo_uri = os.environ.get("MONGO_URI")
+            if not mongo_uri:
+                logger.error("❌ MONGO_URI environment variable not set")
+                raise Exception("MONGO_URI is required for MongoDB Atlas connection")
+            
+            if "localhost" in mongo_uri or "127.0.0.1" in mongo_uri:
+                logger.error("❌ Local MongoDB detected - only Atlas connections permitted")
+                raise Exception("Only MongoDB Atlas connections are allowed")
+            
+            logger.info("Testing MongoDB Atlas connection...")
             self.mongo_client = AsyncIOMotorClient(
-                os.environ.get("MONGO_URI"),
-                serverSelectionTimeoutMS=5000,
+                mongo_uri,
+                serverSelectionTimeoutMS=10000,
                 connectTimeoutMS=10000,
                 socketTimeoutMS=20000,
                 maxPoolSize=50,
                 minPoolSize=5
             )
             
-            # Test the connection
-            await self.mongo_client.admin.command('ping')
-            logger.info("Successfully connected to MongoDB")
+            # Test the connection with timeout
+            await asyncio.wait_for(
+                self.mongo_client.admin.command('ping'), 
+                timeout=10.0
+            )
+            logger.info("✅ Successfully connected to MongoDB Atlas")
             
             # Initialize database manager
             self.db_manager = DatabaseManager(self.mongo_client)
@@ -543,15 +555,20 @@ class EmeraldKillfeedBot(commands.Bot):
             
             # Initialize database architecture
             await self.db_manager.initialize_database()
-            logger.info("Database architecture initialized (PHASE 1)")
+            logger.info("✅ Database architecture initialized (PHASE 1)")
             
             # Initialize parser instances for scheduling
             await self.setup_parsers()
             
             return True
             
+        except asyncio.TimeoutError:
+            logger.error("❌ MongoDB connection timeout - Check your MONGO_URI and Atlas IP whitelist")
+            self.db_manager = None
+            self.db_wrapper = None
+            return False
         except Exception as e:
-            logger.error(f"Failed to connect to MongoDB: {e}")
+            logger.error(f"❌ MongoDB init failed: {e} - Check your MONGO_URI secret and IP whitelist in Atlas")
             logger.error("❌ Database setup failed - operating in limited mode")
             self.db_manager = None
             self.db_wrapper = None
