@@ -241,12 +241,12 @@ class DatabaseManager:
             
             # Reset unified log parser states and force all players offline on bot restart
             try:
-                # Reset parser states to force cold start
+                # Reset parser states to force cold start with new regex patterns
                 reset_result = await self.parser_states.update_many(
-                    {'parser_type': 'log_parser'},  # Only unified log parser
-                    {'$unset': {'last_log_size': ''}}  # Only reset log size, not last_processed
+                    {'parser_type': 'unified'},  # Use 'unified' for the new parser
+                    {'$unset': {'last_timestamp': ''}}  # Reset timestamp to force cold start
                 )
-                logger.info(f"Reset {reset_result.modified_count} unified log parser states for cold start on restart")
+                logger.info(f"Reset {reset_result.modified_count} unified log parser states for cold start with new regex patterns")
                 
                 # Force all player sessions to offline on bot startup (cold start)
                 player_reset_result = await self.player_sessions.update_many(

@@ -24,8 +24,8 @@ class ScalableUnifiedProcessor:
     def _compile_connection_patterns(self) -> Dict[str, re.Pattern]:
         """Compile regex patterns for connection events - Real Deadside server format"""
         return {
-            # Queue state - player joining (based on actual log format)
-            'player_queue': re.compile(r'LogNet: Join request: /Game/Maps/world_[^?]*\?.*?login=([^?&]+).*?eosid=\|([a-f0-9]+).*?Name=([^?&]+)', re.IGNORECASE),
+            # Queue state - player joining (updated to handle password field correctly)
+            'player_queue': re.compile(r'LogNet: Join request: /Game/Maps/world_[^?]*\?.*?login=([^?&]+)\?password=[^?]*\?eosid=\|([a-f0-9]+).*?Name=([^?&]+)', re.IGNORECASE),
             # Connected state - player registered (based on actual log format)
             'player_connect': re.compile(r'LogOnline: Warning: Player \|([a-f0-9]+) successfully registered!', re.IGNORECASE),
             # Disconnected state - player left (based on actual log format)
@@ -83,13 +83,20 @@ class ScalableUnifiedProcessor:
                 if match:
                     if event_type == 'player_queue':
                         # Queue: login=PlayerName, eosid=PlayerID, Name=PlayerName
+                        login_name = match.group(1).strip()
+                        eos_id = match.group(2).strip()
+                        name_field = match.group(3).strip()
+                        
+                        # Use best available name with fallback logic
+                        resolved_name = self._resolve_player_name(login_name, name_field)
+                        
                         return {
                             'timestamp': timestamp,
                             'type': 'connection',
                             'event': event_type,
-                            'player_name': match.group(3),  # Name field
-                            'login_name': match.group(1),   # Login field
-                            'eos_id': match.group(2),       # EOS ID
+                            'player_name': resolved_name,
+                            'login_name': login_name,
+                            'eos_id': eos_id,
                             'raw_message': message
                         }
                     elif event_type == 'player_connect':
@@ -195,10 +202,12 @@ class ScalableUnifiedProcessor:
                 if event_type == 'player_queue':
                     # Player is queuing to join
                     new_state = 'queued'
+                    resolved_name = event.get('player_name', 'Unknown')
                     player_data = {
                         'eos_id': eos_id,
-                        'player_name': event.get('player_name', 'Unknown'),
+                        'player_name': resolved_name,
                         'login_name': event.get('login_name', 'Unknown'),
+                        'character_name': resolved_name,  # For /online compatibility
                         'guild_id': guild_id,
                         'server_id': server_id,
                         'state': 'queued',
@@ -570,16 +579,25 @@ class ScalableUnifiedProcessor:
 
                 # Initialize player if not seen before
                 if eos_id not in player_states:
+                    resolved_name = event.get('player_name', 'Unknown')
                     player_states[eos_id] = {
                         'eos_id': eos_id,
-                        'player_name': event.get('player_name', 'Unknown'),
+                        'player_name': resolved_name,
                         'login_name': event.get('login_name', 'Unknown'),
+                        'character_name': resolved_name,  # For /online compatibility
                         'guild_id': guild_id,
                         'server_id': server_id,
                         'state': 'offline',
                         'last_updated': timestamp,
                         'last_seen': timestamp
                     }
+                else:
+                    # Update name if we get a better one
+                    current_name = player_states[eos_id].get('player_name', 'Unknown')
+                    new_name = event.get('player_name', 'Unknown')
+                    if new_name != 'Unknown' and (current_name == 'Unknown' or len(new_name) > len(current_name)):
+                        player_states[eos_id]['player_name'] = new_name
+                        player_states[eos_id]['character_name'] = new_name
 
                 # Update state based on event type
                 if event_type == 'player_queue':
@@ -885,6 +903,49 @@ class ScalableUnifiedProcessor:
             # Skip duplicate key errors silently during cold start processing
             if "duplicate key error" not in str(e):
                 logger.error(f"Error updating player session: {e}")
+
+    def _resolve_player_name(self, login_name: str, name_field: str) -> str:
+        """Resolve the best player name from available fields with validation"""
+        try:
+            import urllib.parse
+            
+            # Decode URL-encoded names
+            def decode_name(name):
+                try:
+                    return urllib.parse.unquote_plus(name) if name else ""
+                except:
+                    return name or ""
+            
+            decoded_login = decode_name(login_name)
+            decoded_name = decode_name(name_field)
+            
+            # Validation function
+            def is_valid_name(name):
+                if not name or len(name) < 2 or len(name) > 32:
+                    return False
+                # Reject numeric-only names
+                if name.replace('.', '').replace('-', '').isdigit():
+                    return False
+                # Must contain at least one letter
+                if not any(c.isalpha() for c in name):
+                    return False
+                return True
+            
+            # Priority: Name field first, then login field
+            if is_valid_name(decoded_name):
+                return decoded_name
+            elif is_valid_name(decoded_login):
+                return decoded_login
+            elif decoded_name:
+                return decoded_name
+            elif decoded_login:
+                return decoded_login
+            else:
+                return "Unknown"
+                
+        except Exception as e:
+            logger.debug(f"Name resolution failed: {e}")
+            return name_field or login_name or "Unknown"
 
     async def _fetch_server_logs(self, server_config: Dict[str, Any]) -> str:
         """Fetch log data from server via SFTP using robust connection strategies"""
