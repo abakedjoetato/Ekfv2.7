@@ -31,7 +31,7 @@ class AdminBatch(discord.Cog):
             return False
 
     @discord.slash_command(name="batch_stats", description="Show current batch sender statistics")
-    @commands.has_permissions(administrator=True)
+    @discord.default_permissions(administrator=True)
     async def batch_stats(self, ctx: discord.ApplicationContext):
         """Show current batch sender statistics"""
         if not ctx.guild:

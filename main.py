@@ -91,7 +91,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class EmeraldKillfeedBot(commands.Bot):
+class EmeraldKillfeedBot(discord.Bot):
     """Main bot class for Emerald's Killfeed"""
 
     def __init__(self):

@@ -7,7 +7,6 @@ dependencies = [
     "apscheduler>=3.11.0",
     "asyncssh>=2.21.0",
     "boto3>=1.38.30",
-    "discord-py>=2.5.2",
     "flask>=3.1.1",
     "motor>=3.7.1",
     "py-cord==2.6.1",
