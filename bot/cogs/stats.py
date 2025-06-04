@@ -959,12 +959,27 @@ class Stats(discord.Cog):
             guild_id = ctx.guild.id
             logger.info(f"Processing /online command for guild {guild_id}")
 
-            # Fast, optimized database query - get online and queued players
+            # Comprehensive database query to get all relevant player fields
             try:
                 sessions = await self.bot.db_manager.player_sessions.find(
                     {'guild_id': guild_id, 'state': {'$in': ['online', 'queued']}},
-                    {'player_name': 1, 'eos_id': 1, 'server_name': 1, 'server_id': 1, 'state': 1, '_id': 0}
+                    {
+                        'player_name': 1, 
+                        'login_name': 1,
+                        'character_name': 1,
+                        'eos_id': 1, 
+                        'server_name': 1, 
+                        'server_id': 1, 
+                        'state': 1, 
+                        '_id': 0
+                    }
                 ).limit(50).to_list(length=50)
+                
+                logger.info(f"Found {len(sessions)} player sessions for /online command")
+                
+                # Debug: Log first few sessions to see what data we have
+                for i, session in enumerate(sessions[:3]):
+                    logger.info(f"Session {i}: player_name='{session.get('player_name')}', login_name='{session.get('login_name')}', character_name='{session.get('character_name')}', eos_id='{session.get('eos_id', '')[:8]}...'")
 
             except Exception as e:
                 logger.error(f"Database query failed in /online: {e}")
@@ -986,33 +1001,67 @@ class Stats(discord.Cog):
                 await ctx.followup.send(embed=embed)
                 return
             
-            # Group players by server
+            # Group players by server and extract best available name
             servers = {}
             for session in sessions:
                 server_name = session.get('server_name', 'Unknown Server')
+                
+                # Try multiple name fields in order of preference
+                player_name = (
+                    session.get('player_name') or 
+                    session.get('character_name') or 
+                    session.get('login_name') or 
+                    f"Player_{session.get('eos_id', 'Unknown')[:8]}"
+                )
+                
                 if server_name not in servers:
                     servers[server_name] = []
-                servers[server_name].append(session.get('player_name', 'Unknown Player'))
+                servers[server_name].append({
+                    'name': player_name,
+                    'state': session.get('state', 'unknown'),
+                    'eos_id': session.get('eos_id', '')[:8]
+                })
             
-            # Create embed with player list
+            # Create embed with enhanced player list
             embed = discord.Embed(
                 title="🌐 Online Players",
                 color=0x00FF00,
                 timestamp=datetime.now(timezone.utc)
             )
             
+            total_online = sum(len(players) for players in servers.values())
+            embed.description = f"**{total_online}** players currently active"
+            
             for server_name, players in servers.items():
-                player_list = '\n'.join([f"• {player}" for player in players[:10]])  # Limit to 10 per server
-                if len(players) > 10:
-                    player_list += f"\n... and {len(players) - 10} more"
+                online_players = [p for p in players if p['state'] == 'online']
+                queued_players = [p for p in players if p['state'] == 'queued']
+                
+                player_lines = []
+                
+                # Show online players first
+                for i, player in enumerate(online_players[:8], 1):
+                    player_lines.append(f"`{i:2d}.` **{player['name']}** 🟢")
+                
+                # Show queued players
+                for i, player in enumerate(queued_players[:2], len(online_players) + 1):
+                    player_lines.append(f"`{i:2d}.` **{player['name']}** 🟡")
+                
+                remaining = len(players) - len(player_lines)
+                if remaining > 0:
+                    player_lines.append(f"... and {remaining} more")
+                
+                field_name = f"{server_name} ({len(online_players)} online"
+                if queued_players:
+                    field_name += f", {len(queued_players)} queued"
+                field_name += ")"
                 
                 embed.add_field(
-                    name=f"{server_name} ({len(players)} online)",
-                    value=player_list or "No players",
+                    name=field_name,
+                    value='\n'.join(player_lines) if player_lines else "No players",
                     inline=False
                 )
             
-            embed.set_footer(text="Powered by Discord.gg/EmeraldServers")
+            embed.set_footer(text="🟢 Online • 🟡 Queued • Powered by Discord.gg/EmeraldServers")
             await ctx.followup.send(embed=embed)
             
         except Exception as e:
